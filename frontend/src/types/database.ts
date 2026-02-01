@@ -50,6 +50,7 @@ export type Database = {
           notes: string | null;
           manna: number;
           downtime: number;
+          avatar_url: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -64,6 +65,7 @@ export type Database = {
           notes?: string | null;
           manna?: number;
           downtime?: number;
+          avatar_url?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -78,6 +80,7 @@ export type Database = {
           notes?: string | null;
           manna?: number;
           downtime?: number;
+          avatar_url?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -105,35 +108,6 @@ export type Database = {
           updated_at?: string;
         };
       };
-      corporation_reputation: {
-        Row: {
-          id: string;
-          pilot_id: string;
-          corporation_id: string;
-          reputation_value: number;
-          notes: string | null;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          pilot_id: string;
-          corporation_id: string;
-          reputation_value?: number;
-          notes?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          id?: string;
-          pilot_id?: string;
-          corporation_id?: string;
-          reputation_value?: number;
-          notes?: string | null;
-          created_at?: string;
-          updated_at?: string;
-        };
-      };
       exotic_gear: {
         Row: {
           id: string;
@@ -142,6 +116,8 @@ export type Database = {
           description: string | null;
           acquired_date: string;
           notes: string | null;
+          acquired_log_id: string | null;
+          lost_log_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -152,6 +128,8 @@ export type Database = {
           description?: string | null;
           acquired_date?: string;
           notes?: string | null;
+          acquired_log_id?: string | null;
+          lost_log_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -162,6 +140,8 @@ export type Database = {
           description?: string | null;
           acquired_date?: string;
           notes?: string | null;
+          acquired_log_id?: string | null;
+          lost_log_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -209,6 +189,7 @@ export type Database = {
           description: string | null;
           manna_change: number;
           downtime_change: number;
+          ll_clock_change: number;
           created_at: string;
           updated_at: string;
         };
@@ -219,6 +200,7 @@ export type Database = {
           description?: string | null;
           manna_change?: number;
           downtime_change?: number;
+          ll_clock_change?: number;
           created_at?: string;
           updated_at?: string;
         };
@@ -229,6 +211,7 @@ export type Database = {
           description?: string | null;
           manna_change?: number;
           downtime_change?: number;
+          ll_clock_change?: number;
           created_at?: string;
           updated_at?: string;
         };
@@ -256,6 +239,35 @@ export type Database = {
           created_at?: string;
         };
       };
+      reputation_changes: {
+        Row: {
+          id: string;
+          log_entry_id: string;
+          pilot_id: string;
+          corporation_id: string;
+          change_value: number;
+          notes: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          log_entry_id: string;
+          pilot_id: string;
+          corporation_id: string;
+          change_value: number;
+          notes?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          log_entry_id?: string;
+          pilot_id?: string;
+          corporation_id?: string;
+          change_value?: number;
+          notes?: string | null;
+          created_at?: string;
+        };
+      };
     };
     Enums: {
       log_type: "game" | "trade";
@@ -267,11 +279,19 @@ export type Database = {
 export type User = Database["public"]["Tables"]["users"]["Row"];
 export type Pilot = Database["public"]["Tables"]["pilots"]["Row"];
 export type Corporation = Database["public"]["Tables"]["corporations"]["Row"];
-export type CorporationReputation =
-  Database["public"]["Tables"]["corporation_reputation"]["Row"];
 export type ExoticGear = Database["public"]["Tables"]["exotic_gear"]["Row"];
 export type Clock = Database["public"]["Tables"]["clocks"]["Row"];
 export type LogEntry = Database["public"]["Tables"]["log_entries"]["Row"];
 export type ClockProgress =
   Database["public"]["Tables"]["clock_progress"]["Row"];
+export type ReputationChange =
+  Database["public"]["Tables"]["reputation_changes"]["Row"];
 export type LogType = Database["public"]["Enums"]["log_type"];
+
+// View types (aggregated from tables)
+export type PilotReputation = {
+  pilot_id: string;
+  corporation_id: string;
+  corporation_name: string;
+  reputation_value: number;
+};

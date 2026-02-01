@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import type { User, Pilot } from "@/types/database";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -14,11 +15,13 @@ export default async function DashboardPage() {
   }
 
   // Get user profile
-  const { data: profile, error: profileError } = await supabase
+  const { data: profileData, error: profileError } = await supabase
     .from("users")
     .select("*")
     .eq("id", user.id)
     .single();
+
+  const profile = profileData as User | null;
 
   // Debug: log if profile fetch failed
   if (profileError) {
@@ -26,11 +29,13 @@ export default async function DashboardPage() {
   }
 
   // Get user's pilots
-  const { data: pilots } = await supabase
+  const { data: pilotsData } = await supabase
     .from("pilots")
     .select("*")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
+
+  const pilots = pilotsData as Pilot[] | null;
 
   const handleSignOut = async () => {
     "use server";
