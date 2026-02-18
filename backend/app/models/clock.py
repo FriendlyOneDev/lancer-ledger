@@ -18,13 +18,11 @@ class ClockCreate(ClockBase):
 
 
 class ClockUpdate(BaseModel):
-    """Model for updating a clock."""
+    """Model for updating a clock metadata (not progress)."""
 
     name: str | None = None
     segments: int | None = Field(default=None, ge=1)
-    filled: int | None = Field(default=None, ge=0)
     tick_amount: int | None = Field(default=None, ge=1)
-    is_completed: bool | None = None
 
 
 class Clock(ClockBase):
@@ -33,6 +31,7 @@ class Clock(ClockBase):
     id: UUID
     pilot_id: UUID | None = None
     filled: int = Field(default=0, ge=0)
+    manual_ticks: int = 0
     is_completed: bool = False
     created_at: datetime
     updated_at: datetime
@@ -42,6 +41,6 @@ class Clock(ClockBase):
 
 
 class ClockTick(BaseModel):
-    """Model for ticking a clock."""
+    """Model for ticking a clock (positive or negative)."""
 
-    ticks: int = Field(default=1, ge=1)
+    ticks: int = Field(default=1)

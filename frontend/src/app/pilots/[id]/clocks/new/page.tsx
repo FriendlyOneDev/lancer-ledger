@@ -17,7 +17,6 @@ export default function NewClockPage({ params }: NewClockPageProps) {
   const [segments, setSegments] = useState(4);
   const [customSegments, setCustomSegments] = useState("");
   const [useCustom, setUseCustom] = useState(false);
-  const [tickAmount, setTickAmount] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
@@ -65,7 +64,6 @@ export default function NewClockPage({ params }: NewClockPageProps) {
         body: JSON.stringify({
           name: name.trim(),
           segments: finalSegments,
-          tick_amount: tickAmount,
         }),
       });
 
@@ -163,23 +161,6 @@ export default function NewClockPage({ params }: NewClockPageProps) {
                 placeholder="Enter number"
               />
             )}
-          </div>
-
-          <div>
-            <label htmlFor="tickAmount" className="block text-sm font-medium text-gray-300 mb-2">
-              Tick Amount
-            </label>
-            <p className="text-sm text-gray-500 mb-2">
-              How many segments fill per tick (default: 1)
-            </p>
-            <input
-              id="tickAmount"
-              type="number"
-              value={tickAmount}
-              onChange={(e) => setTickAmount(Math.max(1, parseInt(e.target.value) || 1))}
-              min="1"
-              className="w-32 px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
           </div>
 
           <div className="flex gap-4">

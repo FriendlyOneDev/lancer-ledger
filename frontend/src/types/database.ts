@@ -154,6 +154,7 @@ export type Database = {
           segments: number;
           filled: number;
           tick_amount: number;
+          manual_ticks: number;
           is_completed: boolean;
           created_at: string;
           updated_at: string;
@@ -165,6 +166,7 @@ export type Database = {
           segments: number;
           filled?: number;
           tick_amount?: number;
+          manual_ticks?: number;
           is_completed?: boolean;
           created_at?: string;
           updated_at?: string;
@@ -176,6 +178,7 @@ export type Database = {
           segments?: number;
           filled?: number;
           tick_amount?: number;
+          manual_ticks?: number;
           is_completed?: boolean;
           created_at?: string;
           updated_at?: string;

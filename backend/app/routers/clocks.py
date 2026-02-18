@@ -5,6 +5,7 @@ from app.db import get_db
 from app.models.user import User
 from app.models.clock import Clock, ClockCreate, ClockUpdate, ClockTick
 from app.routers.auth import get_current_user
+from app.services.resource_calc import recalculate_clock
 
 router = APIRouter()
 
@@ -108,7 +109,7 @@ async def tick_clock(
     current_user: User = Depends(get_current_user),
     db: Client = Depends(get_db),
 ):
-    """Tick a clock (add progress)."""
+    """Tick a clock directly (outside of a log entry)."""
     # Get clock and verify ownership
     clock_result = (
         db.table("clocks").select("*, pilots(user_id)").eq("id", str(clock_id)).single().execute()
@@ -120,26 +121,25 @@ async def tick_clock(
     if clock_result.data["pilots"]["user_id"] != str(current_user.id):
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    clock_data = clock_result.data
-    current_filled = clock_data["filled"]
-    tick_amount = clock_data["tick_amount"]
-    segments = clock_data["segments"]
+    # Update manual_ticks, then recalculate filled/is_completed
+    current_manual = clock_result.data.get("manual_ticks", 0)
+    new_manual = current_manual + tick_request.ticks
 
-    # Calculate new filled value
-    new_filled = min(current_filled + (tick_request.ticks * tick_amount), segments)
-    is_completed = new_filled >= segments
+    db.table("clocks").update({
+        "manual_ticks": new_manual,
+    }).eq("id", str(clock_id)).execute()
 
+    recalculate_clock(db, str(clock_id))
+
+    # Fetch updated clock
     result = (
-        db.table("clocks")
-        .update({"filled": new_filled, "is_completed": is_completed})
-        .eq("id", str(clock_id))
-        .execute()
+        db.table("clocks").select("*").eq("id", str(clock_id)).single().execute()
     )
 
     if not result.data:
         raise HTTPException(status_code=400, detail="Failed to tick clock")
 
-    return Clock(**result.data[0])
+    return Clock(**result.data)
 
 
 @router.delete("/clocks/{clock_id}")

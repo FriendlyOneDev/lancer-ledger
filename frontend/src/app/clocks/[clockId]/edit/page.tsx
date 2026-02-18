@@ -14,7 +14,7 @@ export default function EditClockPage({ params }: EditClockPageProps) {
   const [clockId, setClockId] = useState<string>("");
   const [clock, setClock] = useState<Clock | null>(null);
   const [name, setName] = useState("");
-  const [filled, setFilled] = useState(0);
+  const [segments, setSegments] = useState(4);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -42,7 +42,7 @@ export default function EditClockPage({ params }: EditClockPageProps) {
         const clockData = data as Clock;
         setClock(clockData);
         setName(clockData.name);
-        setFilled(clockData.filled);
+        setSegments(clockData.segments);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load clock");
       } finally {
@@ -80,8 +80,7 @@ export default function EditClockPage({ params }: EditClockPageProps) {
         },
         body: JSON.stringify({
           name: name.trim(),
-          filled: Math.min(filled, clock.segments),
-          is_completed: filled >= clock.segments,
+          segments,
         }),
       });
 
@@ -191,23 +190,21 @@ export default function EditClockPage({ params }: EditClockPageProps) {
           </div>
 
           <div>
-            <label htmlFor="filled" className="block text-sm font-medium text-gray-300 mb-2">
-              Segments Filled (max: {clock.segments})
+            <label htmlFor="segments" className="block text-sm font-medium text-gray-300 mb-2">
+              Total Segments
             </label>
             <input
-              id="filled"
+              id="segments"
               type="number"
-              value={filled}
-              onChange={(e) => setFilled(Math.max(0, Math.min(clock.segments, parseInt(e.target.value) || 0)))}
-              min="0"
-              max={clock.segments}
+              value={segments}
+              onChange={(e) => setSegments(Math.max(1, parseInt(e.target.value) || 1))}
+              min="1"
               className="w-32 px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
-          </div>
-
-          <div className="text-sm text-gray-500">
-            <p>Total segments: {clock.segments} | Tick amount: {clock.tick_amount}</p>
-            {clock.is_completed && <p className="text-green-400">This clock is completed.</p>}
+            <p className="text-sm text-gray-500 mt-2">
+              Progress: {clock.filled}/{clock.segments} filled
+            </p>
+            {clock.is_completed && <p className="text-sm text-green-400 mt-1">This clock is completed.</p>}
           </div>
 
           <div className="flex gap-4">
