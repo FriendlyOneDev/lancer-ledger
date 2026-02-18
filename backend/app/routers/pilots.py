@@ -6,19 +6,9 @@ from app.models.user import User
 from app.models.pilot import Pilot, PilotCreate, PilotUpdate, PilotWithDetails
 from app.routers.auth import get_current_user
 from app.services.import_al import parse_al_csv
+from app.services.resource_calc import recalculate_pilot_resources
 
 router = APIRouter()
-
-
-def get_ll_clock_segments(license_level: int) -> int:
-    """Get the number of segments for an LL clock based on license level."""
-    if 1 <= license_level <= 5:
-        return 3
-    elif 6 <= license_level <= 9:
-        return 4
-    elif 10 <= license_level <= 12:
-        return 5
-    return 3
 
 
 @router.get("", response_model=list[PilotWithDetails])
@@ -169,15 +159,11 @@ async def import_pilot_from_al(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Failed to parse CSV: {str(e)}")
 
-    # Create the pilot
+    # Create the pilot (resources will be recalculated from logs after import)
     pilot_data = {
         "user_id": str(current_user.id),
         "name": imported.name,
         "callsign": imported.callsign,
-        "license_level": imported.license_level,
-        "ll_clock_progress": imported.ll_clock_progress,
-        "manna": imported.manna,
-        "downtime": imported.downtime,
     }
     # Only include avatar_url if it has a value
     if imported.avatar_url:
@@ -232,5 +218,16 @@ async def import_pilot_from_al(
             }
             db.table("exotic_gear").insert(gear_data).execute()
 
-    created_pilot = Pilot(**pilot_result.data[0])
-    return PilotWithDetails.from_pilot(created_pilot)
+    # Recalculate pilot resources from all imported logs
+    recalculate_pilot_resources(db, pilot_id)
+
+    # Re-fetch the pilot with updated resources
+    updated_result = (
+        db.table("pilots")
+        .select("*")
+        .eq("id", pilot_id)
+        .single()
+        .execute()
+    )
+    pilot = Pilot(**updated_result.data)
+    return PilotWithDetails.from_pilot(pilot)

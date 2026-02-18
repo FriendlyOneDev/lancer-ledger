@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from supabase import Client
 from uuid import UUID
 from app.db import get_db
@@ -6,6 +6,7 @@ from app.models.user import User
 from app.models.pilot import Pilot, PilotWithDetails
 from app.models.log_entry import LogEntry, LogType
 from app.routers.auth import require_gm
+from app.services.resource_calc import recalculate_pilot_resources
 
 router = APIRouter()
 
@@ -112,3 +113,50 @@ async def list_all_logs(
         "limit": limit,
         "offset": offset,
     }
+
+
+@router.post("/pilots/{pilot_id}/recalculate", response_model=PilotWithDetails)
+async def recalculate_pilot(
+    pilot_id: UUID,
+    current_user: User = Depends(require_gm),
+    db: Client = Depends(get_db),
+):
+    """Recalculate a specific pilot's resources from their logs (GM only)."""
+    existing = (
+        db.table("pilots")
+        .select("id")
+        .eq("id", str(pilot_id))
+        .single()
+        .execute()
+    )
+
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Pilot not found")
+
+    recalculate_pilot_resources(db, str(pilot_id))
+
+    result = (
+        db.table("pilots")
+        .select("*")
+        .eq("id", str(pilot_id))
+        .single()
+        .execute()
+    )
+    pilot = Pilot(**result.data)
+    return PilotWithDetails.from_pilot(pilot)
+
+
+@router.post("/recalculate-all")
+async def recalculate_all_pilots(
+    current_user: User = Depends(require_gm),
+    db: Client = Depends(get_db),
+):
+    """Recalculate resources for all pilots from their logs (GM only)."""
+    result = db.table("pilots").select("id").execute()
+
+    count = 0
+    for pilot_row in result.data:
+        recalculate_pilot_resources(db, pilot_row["id"])
+        count += 1
+
+    return {"message": f"Recalculated resources for {count} pilots"}

@@ -4,7 +4,9 @@ import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import type { Clock } from "@/types/database";
+import ClockWidget from "@/components/ClockWidget";
+import LLClockDisplay from "@/components/LLClockDisplay";
+import type { Clock, Pilot } from "@/types/database";
 
 interface NewLogPageProps {
   params: Promise<{ id: string }>;
@@ -12,11 +14,12 @@ interface NewLogPageProps {
 
 export default function NewLogPage({ params }: NewLogPageProps) {
   const [pilotId, setPilotId] = useState<string>("");
+  const [pilot, setPilot] = useState<Pilot | null>(null);
   const [logType, setLogType] = useState<"game" | "trade">("game");
   const [description, setDescription] = useState("");
   const [mannaChange, setMannaChange] = useState(0);
   const [downtimeChange, setDowntimeChange] = useState(0);
-  const [tickLlClock, setTickLlClock] = useState(true);
+  const [llClockChange, setLlClockChange] = useState(1);
   const [clocks, setClocks] = useState<Clock[]>([]);
   const [selectedClocks, setSelectedClocks] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
@@ -33,30 +36,40 @@ export default function NewLogPage({ params }: NewLogPageProps) {
     const type = searchParams.get("type");
     if (type === "trade") {
       setLogType("trade");
-      setTickLlClock(false);
+      setLlClockChange(0);
     }
   }, [searchParams]);
 
   useEffect(() => {
     if (!pilotId) return;
 
-    const fetchClocks = async () => {
-      const { data } = await supabase
+    const fetchData = async () => {
+      const { data: pilotData } = await supabase
+        .from("pilots")
+        .select("*")
+        .eq("id", pilotId)
+        .single();
+
+      if (pilotData) {
+        setPilot(pilotData as Pilot);
+      }
+
+      const { data: clocksData } = await supabase
         .from("clocks")
         .select("*")
         .eq("pilot_id", pilotId)
         .eq("is_completed", false)
         .order("created_at", { ascending: false });
 
-      if (data) {
-        setClocks(data as Clock[]);
+      if (clocksData) {
+        setClocks(clocksData as Clock[]);
       }
     };
 
-    fetchClocks();
+    fetchData();
   }, [pilotId, supabase]);
 
-  const handleClockToggle = (clockId: string, ticks: number) => {
+  const handleClockChange = (clockId: string, ticks: number) => {
     setSelectedClocks((prev) => {
       if (ticks === 0) {
         const { [clockId]: _, ...rest } = prev;
@@ -99,7 +112,7 @@ export default function NewLogPage({ params }: NewLogPageProps) {
           description: description.trim() || null,
           manna_change: mannaChange,
           downtime_change: downtimeChange,
-          tick_ll_clock: logType === "game" && tickLlClock,
+          ll_clock_change: llClockChange,
           clock_progress: clockProgress,
         }),
       });
@@ -129,170 +142,218 @@ export default function NewLogPage({ params }: NewLogPageProps) {
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-4 py-8">
+      <main className="max-w-5xl mx-auto px-4 py-8">
         <h2 className="text-2xl font-bold mb-6">
           Create {logType === "game" ? "Game" : "Trade"} Log
         </h2>
 
-        <form onSubmit={handleSubmit} className="bg-gray-800 rounded-lg p-6 space-y-6">
-          {error && (
-            <div className="bg-red-900/50 border border-red-500 text-red-200 px-4 py-3 rounded">
-              {error}
-            </div>
-          )}
+        <div className="flex flex-col lg:flex-row gap-6">
+          {/* Left Column — Form */}
+          <form onSubmit={handleSubmit} className="flex-1 bg-gray-800 rounded-lg p-6 space-y-6">
+            {error && (
+              <div className="bg-red-900/50 border border-red-500 text-red-200 px-4 py-3 rounded">
+                {error}
+              </div>
+            )}
 
-          {/* Log Type Toggle */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Log Type
-            </label>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setLogType("game");
-                  setTickLlClock(true);
-                }}
-                className={`px-4 py-2 rounded-lg font-medium ${
-                  logType === "game"
-                    ? "bg-green-600 text-white"
-                    : "bg-gray-700 text-gray-300 hover:bg-gray-600"
-                }`}
-              >
-                Game Session
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setLogType("trade");
-                  setTickLlClock(false);
-                }}
-                className={`px-4 py-2 rounded-lg font-medium ${
-                  logType === "trade"
-                    ? "bg-purple-600 text-white"
-                    : "bg-gray-700 text-gray-300 hover:bg-gray-600"
-                }`}
-              >
-                Trade / Other
-              </button>
-            </div>
-          </div>
-
-          {/* Description */}
-          <div>
-            <label htmlFor="description" className="block text-sm font-medium text-gray-300 mb-2">
-              Description
-            </label>
-            <textarea
-              id="description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={3}
-              className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="What happened this session?"
-            />
-          </div>
-
-          {/* Resource Changes */}
-          <div className="grid grid-cols-2 gap-4">
+            {/* Log Type Toggle */}
             <div>
-              <label htmlFor="manna" className="block text-sm font-medium text-gray-300 mb-2">
-                Manna Change
+              <label className="block text-sm font-medium text-gray-300 mb-2">Log Type</label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLogType("game");
+                    setLlClockChange(1);
+                  }}
+                  className={`px-4 py-2 rounded-lg font-medium ${
+                    logType === "game"
+                      ? "bg-green-600 text-white"
+                      : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                  }`}
+                >
+                  Game Session
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLogType("trade");
+                    setLlClockChange(0);
+                  }}
+                  className={`px-4 py-2 rounded-lg font-medium ${
+                    logType === "trade"
+                      ? "bg-purple-600 text-white"
+                      : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                  }`}
+                >
+                  Trade / Other
+                </button>
+              </div>
+            </div>
+
+            {/* Description */}
+            <div>
+              <label htmlFor="description" className="block text-sm font-medium text-gray-300 mb-2">
+                Description
               </label>
-              <input
-                id="manna"
-                type="number"
-                value={mannaChange}
-                onChange={(e) => setMannaChange(parseInt(e.target.value) || 0)}
+              <textarea
+                id="description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={3}
                 className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="What happened this session?"
               />
             </div>
-            <div>
-              <label htmlFor="downtime" className="block text-sm font-medium text-gray-300 mb-2">
-                Downtime Change
-              </label>
-              <input
-                id="downtime"
-                type="number"
-                value={downtimeChange}
-                onChange={(e) => setDowntimeChange(parseInt(e.target.value) || 0)}
-                className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-          </div>
 
-          {/* LL Clock (Game logs only) */}
-          {logType === "game" && (
-            <div className="flex items-center gap-3">
-              <input
-                id="tickLl"
-                type="checkbox"
-                checked={tickLlClock}
-                onChange={(e) => setTickLlClock(e.target.checked)}
-                className="w-4 h-4 rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-blue-500"
-              />
-              <label htmlFor="tickLl" className="text-sm text-gray-300">
-                Tick License Level clock (+1 segment)
-              </label>
+            {/* Resource Changes */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="manna" className="block text-sm font-medium text-gray-300 mb-2">
+                  Manna Change
+                </label>
+                <input
+                  id="manna"
+                  type="number"
+                  value={mannaChange}
+                  onChange={(e) => setMannaChange(parseInt(e.target.value) || 0)}
+                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label htmlFor="downtime" className="block text-sm font-medium text-gray-300 mb-2">
+                  Downtime Change
+                </label>
+                <input
+                  id="downtime"
+                  type="number"
+                  value={downtimeChange}
+                  onChange={(e) => setDowntimeChange(parseInt(e.target.value) || 0)}
+                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
             </div>
-          )}
 
-          {/* Personal Clocks */}
-          {clocks.length > 0 && (
+            {/* Clock Tick Controls */}
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Tick Personal Clocks
-              </label>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Clock Ticks</label>
               <div className="space-y-2">
+                {/* LL Clock control */}
+                <div className="flex items-center justify-between bg-gray-700 rounded-lg p-3">
+                  <span className="font-medium text-yellow-400">License Level</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setLlClockChange(Math.max(0, llClockChange - 1))}
+                      className="w-8 h-8 flex items-center justify-center bg-gray-600 hover:bg-gray-500 rounded text-lg font-bold"
+                    >
+                      -
+                    </button>
+                    <span className="w-8 text-center font-mono">{llClockChange}</span>
+                    <button
+                      type="button"
+                      onClick={() => setLlClockChange(Math.min(25, llClockChange + 1))}
+                      className="w-8 h-8 flex items-center justify-center bg-gray-600 hover:bg-gray-500 rounded text-lg font-bold"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+
+                {/* Personal clock controls */}
                 {clocks.map((clock) => (
                   <div
                     key={clock.id}
                     className="flex items-center justify-between bg-gray-700 rounded-lg p-3"
                   >
-                    <div>
-                      <span className="font-medium">{clock.name}</span>
-                      <span className="text-sm text-gray-400 ml-2">
-                        ({clock.filled}/{clock.segments})
+                    <span className="font-medium">{clock.name}</span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleClockChange(
+                            clock.id,
+                            Math.max(0, (selectedClocks[clock.id] || 0) - 1)
+                          )
+                        }
+                        className="w-8 h-8 flex items-center justify-center bg-gray-600 hover:bg-gray-500 rounded text-lg font-bold"
+                      >
+                        -
+                      </button>
+                      <span className="w-8 text-center font-mono">
+                        {selectedClocks[clock.id] || 0}
                       </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleClockChange(
+                            clock.id,
+                            Math.min(25, (selectedClocks[clock.id] || 0) + 1)
+                          )
+                        }
+                        className="w-8 h-8 flex items-center justify-center bg-gray-600 hover:bg-gray-500 rounded text-lg font-bold"
+                      >
+                        +
+                      </button>
                     </div>
-                    <select
-                      value={selectedClocks[clock.id] || 0}
-                      onChange={(e) =>
-                        handleClockToggle(clock.id, parseInt(e.target.value))
-                      }
-                      className="px-3 py-1 bg-gray-600 border border-gray-500 rounded text-sm"
-                    >
-                      <option value={0}>No tick</option>
-                      <option value={1}>+1 tick</option>
-                      <option value={2}>+2 ticks</option>
-                      <option value={3}>+3 ticks</option>
-                    </select>
                   </div>
                 ))}
               </div>
             </div>
-          )}
 
-          <div className="flex gap-4">
-            <button
-              type="submit"
-              disabled={loading}
-              className={`px-6 py-2 rounded-lg font-medium disabled:bg-gray-600 disabled:cursor-not-allowed ${
-                logType === "game"
-                  ? "bg-green-600 hover:bg-green-500"
-                  : "bg-purple-600 hover:bg-purple-500"
-              }`}
-            >
-              {loading ? "Creating..." : "Create Log Entry"}
-            </button>
-            <Link
-              href={`/pilots/${pilotId}`}
-              className="px-6 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg font-medium"
-            >
-              Cancel
-            </Link>
+            <div className="flex gap-4">
+              <button
+                type="submit"
+                disabled={loading}
+                className={`px-6 py-2 rounded-lg font-medium disabled:bg-gray-600 disabled:cursor-not-allowed ${
+                  logType === "game"
+                    ? "bg-green-600 hover:bg-green-500"
+                    : "bg-purple-600 hover:bg-purple-500"
+                }`}
+              >
+                {loading ? "Creating..." : "Create Log Entry"}
+              </button>
+              <Link
+                href={`/pilots/${pilotId}`}
+                className="px-6 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg font-medium"
+              >
+                Cancel
+              </Link>
+            </div>
+          </form>
+
+          {/* Right Column — Clock Visuals */}
+          <div className="lg:w-72 bg-gray-800 rounded-lg p-6">
+            <h3 className="text-sm font-medium text-gray-300 mb-4">Clock Preview</h3>
+            <div className="space-y-6">
+              {/* LL Clock visual */}
+              {pilot && (
+                <LLClockDisplay
+                  licenseLevel={pilot.license_level}
+                  progress={pilot.ll_clock_progress}
+                  pendingTicks={llClockChange}
+                  size={100}
+                />
+              )}
+
+              {/* Personal clock visuals */}
+              {clocks.map((clock) => (
+                <ClockWidget
+                  key={clock.id}
+                  filled={clock.filled}
+                  pending={(selectedClocks[clock.id] || 0) * clock.tick_amount}
+                  total={clock.segments}
+                  label={clock.name}
+                  size={100}
+                />
+              ))}
+
+              {clocks.length === 0 && !pilot && (
+                <p className="text-sm text-gray-500">Loading...</p>
+              )}
+            </div>
           </div>
-        </form>
+        </div>
       </main>
     </div>
   );

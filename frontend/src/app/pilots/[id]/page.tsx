@@ -1,6 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
+import ClockWidget from "@/components/ClockWidget";
+import ClockTickControls from "@/components/ClockTickControls";
+import LLClockDisplay from "@/components/LLClockDisplay";
 import type {
   Pilot,
   Clock,
@@ -10,82 +13,6 @@ import type {
 
 interface PilotPageProps {
   params: Promise<{ id: string }>;
-}
-
-function getLLClockSegments(licenseLevel: number): number {
-  if (licenseLevel >= 1 && licenseLevel <= 5) return 3;
-  if (licenseLevel >= 6 && licenseLevel <= 9) return 4;
-  if (licenseLevel >= 10 && licenseLevel <= 12) return 5;
-  return 3;
-}
-
-function ClockDisplay({
-  filled,
-  total,
-  label,
-  size = 80,
-  fillColor = "#3b82f6",
-}: {
-  filled: number;
-  total: number;
-  label: string;
-  size?: number;
-  fillColor?: string;
-}) {
-  const radius = size / 2 - 2;
-  const center = size / 2;
-
-  // Generate pie segments
-  const segments = Array.from({ length: total }).map((_, i) => {
-    const startAngle = (i * 360) / total - 90; // Start from top
-    const endAngle = ((i + 1) * 360) / total - 90;
-    const isFilled = i < filled;
-
-    // Convert angles to radians
-    const startRad = (startAngle * Math.PI) / 180;
-    const endRad = (endAngle * Math.PI) / 180;
-
-    // Calculate arc points
-    const x1 = center + radius * Math.cos(startRad);
-    const y1 = center + radius * Math.sin(startRad);
-    const x2 = center + radius * Math.cos(endRad);
-    const y2 = center + radius * Math.sin(endRad);
-
-    // Large arc flag (1 if segment > 180 degrees)
-    const largeArc = 360 / total > 180 ? 1 : 0;
-
-    const pathD = `M ${center} ${center} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z`;
-
-    return (
-      <path
-        key={i}
-        d={pathD}
-        fill={isFilled ? fillColor : "#374151"}
-        stroke="#1f2937"
-        strokeWidth="2"
-      />
-    );
-  });
-
-  return (
-    <div className="flex flex-col items-center">
-      {label && <span className="text-sm text-gray-400 mb-2">{label}</span>}
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        <circle
-          cx={center}
-          cy={center}
-          r={radius}
-          fill="#374151"
-          stroke="#1f2937"
-          strokeWidth="2"
-        />
-        {segments}
-      </svg>
-      <span className="text-xs text-gray-500 mt-1">
-        {filled}/{total}
-      </span>
-    </div>
-  );
 }
 
 export default async function PilotPage({ params }: PilotPageProps) {
@@ -165,7 +92,7 @@ export default async function PilotPage({ params }: PilotPageProps) {
 
   const logs = logsData as LogEntry[] | null;
 
-  const llClockSegments = getLLClockSegments(pilot.license_level);
+  // LL clock progress is displayed per-level by LLClockDisplay
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
@@ -219,10 +146,9 @@ export default async function PilotPage({ params }: PilotPageProps) {
 
           {/* LL Clock */}
           <div className="mt-6 flex justify-center">
-            <ClockDisplay
-              filled={pilot.ll_clock_progress}
-              total={llClockSegments}
-              label="License Level Progress"
+            <LLClockDisplay
+              licenseLevel={pilot.license_level}
+              progress={pilot.ll_clock_progress}
             />
           </div>
 
@@ -277,11 +203,21 @@ export default async function PilotPage({ params }: PilotPageProps) {
                       )}
                     </div>
                   </div>
-                  <ClockDisplay
-                    filled={clock.filled}
-                    total={clock.segments}
-                    label=""
-                  />
+                  {pilot.user_id === user.id ? (
+                    <ClockTickControls
+                      clockId={clock.id}
+                      name={clock.name}
+                      filled={clock.filled}
+                      segments={clock.segments}
+                      isCompleted={clock.is_completed}
+                    />
+                  ) : (
+                    <ClockWidget
+                      filled={clock.filled}
+                      total={clock.segments}
+                      label=""
+                    />
+                  )}
                 </div>
               ))}
             </div>

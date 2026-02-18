@@ -3,21 +3,17 @@ from supabase import Client
 from uuid import UUID
 from app.db import get_db
 from app.models.user import User
-from app.models.log_entry import LogEntry, LogEntryCreate, LogEntryUpdate, LogType
+from app.models.log_entry import (
+    LogEntry,
+    LogEntryCreate,
+    LogEntryUpdate,
+    LogEntryWithDetails,
+    ClockProgressEntry,
+)
 from app.routers.auth import get_current_user
+from app.services.resource_calc import recalculate_pilot_resources
 
 router = APIRouter()
-
-
-def get_ll_clock_segments(license_level: int) -> int:
-    """Get the number of segments for an LL clock based on license level."""
-    if 1 <= license_level <= 5:
-        return 3
-    elif 6 <= license_level <= 9:
-        return 4
-    elif 10 <= license_level <= 12:
-        return 5
-    return 3
 
 
 async def verify_pilot_ownership(
@@ -66,14 +62,11 @@ async def create_log_entry(
     db: Client = Depends(get_db),
 ):
     """Create a new log entry for a pilot."""
-    pilot_data = await verify_pilot_ownership(pilot_id, current_user, db)
-    if not pilot_data:
+    if not await verify_pilot_ownership(pilot_id, current_user, db):
         raise HTTPException(status_code=404, detail="Pilot not found")
 
-    # Calculate LL clock change for game logs
-    ll_clock_change = 0
-    if log_entry.log_type == LogType.GAME and log_entry.tick_ll_clock:
-        ll_clock_change = 1
+    # Clamp LL clock change to 0-10
+    ll_clock_change = max(0, min(25, log_entry.ll_clock_change))
 
     # Create the log entry
     log_data = {
@@ -93,39 +86,12 @@ async def create_log_entry(
     created_log = log_result.data[0]
     log_id = created_log["id"]
 
-    # Handle LL clock progression for game logs
-    if ll_clock_change > 0:
-        current_ll = pilot_data["license_level"]
-        current_progress = pilot_data["ll_clock_progress"]
-        segments = get_ll_clock_segments(current_ll)
-
-        # Tick the LL clock
-        new_progress = current_progress + ll_clock_change
-
-        if new_progress >= segments and current_ll < 12:
-            # Level up!
-            new_ll = current_ll + 1
-            db.table("pilots").update({
-                "license_level": new_ll,
-                "ll_clock_progress": 0,
-            }).eq("id", str(pilot_id)).execute()
-        elif current_ll >= 12:
-            # At max level, cap progress
-            new_progress = min(new_progress, segments)
-            db.table("pilots").update({
-                "ll_clock_progress": new_progress,
-            }).eq("id", str(pilot_id)).execute()
-        else:
-            db.table("pilots").update({
-                "ll_clock_progress": new_progress,
-            }).eq("id", str(pilot_id)).execute()
-
-    # Handle personal clock progress
+    # Insert clock progress entries (clock state is recalculated below)
     for progress in log_entry.clock_progress:
         # Verify clock belongs to pilot
         clock_result = (
             db.table("clocks")
-            .select("*")
+            .select("id")
             .eq("id", str(progress.clock_id))
             .eq("pilot_id", str(pilot_id))
             .single()
@@ -133,19 +99,6 @@ async def create_log_entry(
         )
 
         if clock_result.data:
-            clock = clock_result.data
-            new_filled = min(
-                clock["filled"] + (progress.ticks_applied * clock["tick_amount"]),
-                clock["segments"],
-            )
-            is_completed = new_filled >= clock["segments"]
-
-            db.table("clocks").update({
-                "filled": new_filled,
-                "is_completed": is_completed,
-            }).eq("id", str(progress.clock_id)).execute()
-
-            # Record the clock progress
             db.table("clock_progress").insert({
                 "log_entry_id": log_id,
                 "clock_id": str(progress.clock_id),
@@ -164,7 +117,6 @@ async def create_log_entry(
 
     # Handle gear lost
     for gear_lost in log_entry.gear_lost:
-        # Verify gear belongs to pilot and is not already lost
         gear_result = (
             db.table("exotic_gear")
             .select("*")
@@ -190,12 +142,8 @@ async def create_log_entry(
             "notes": rep_change.notes,
         }).execute()
 
-    # Update pilot's manna and downtime
-    if log_entry.manna_change != 0 or log_entry.downtime_change != 0:
-        db.table("pilots").update({
-            "manna": pilot_data["manna"] + log_entry.manna_change,
-            "downtime": pilot_data["downtime"] + log_entry.downtime_change,
-        }).eq("id", str(pilot_id)).execute()
+    # Recalculate pilot resources and clock states from all logs
+    recalculate_pilot_resources(db, str(pilot_id))
 
     return LogEntry(**created_log)
 
@@ -221,7 +169,47 @@ async def get_log_entry(
     if result.data["pilots"]["user_id"] != str(current_user.id):
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    return LogEntry(**result.data)
+    log_data = {k: v for k, v in result.data.items() if k != "pilots"}
+    return LogEntry(**log_data)
+
+
+@router.get("/logs/{log_id}/details")
+async def get_log_entry_details(
+    log_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Client = Depends(get_db),
+):
+    """Get a log entry with its clock progress entries."""
+    result = (
+        db.table("log_entries")
+        .select("*, pilots(user_id)")
+        .eq("id", str(log_id))
+        .single()
+        .execute()
+    )
+
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Log entry not found")
+
+    if result.data["pilots"]["user_id"] != str(current_user.id):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    log_data = {k: v for k, v in result.data.items() if k != "pilots"}
+
+    # Fetch clock progress for this log
+    progress_result = (
+        db.table("clock_progress")
+        .select("clock_id, ticks_applied")
+        .eq("log_entry_id", str(log_id))
+        .execute()
+    )
+
+    log_data["clock_progress"] = [
+        {"clock_id": p["clock_id"], "ticks_applied": p["ticks_applied"]}
+        for p in progress_result.data
+    ]
+
+    return log_data
 
 
 @router.put("/logs/{log_id}", response_model=LogEntry)
@@ -231,7 +219,7 @@ async def update_log_entry(
     current_user: User = Depends(get_current_user),
     db: Client = Depends(get_db),
 ):
-    """Update a log entry (only description can be updated)."""
+    """Update a log entry including resources and clock progress."""
     # Get log and verify ownership
     log_result = (
         db.table("log_entries")
@@ -247,17 +235,57 @@ async def update_log_entry(
     if log_result.data["pilots"]["user_id"] != str(current_user.id):
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    # Only allow updating description (not resource changes after creation)
-    update_data = {"description": log_update.description}
+    pilot_id = log_result.data["pilot_id"]
 
-    result = (
-        db.table("log_entries").update(update_data).eq("id", str(log_id)).execute()
-    )
+    # Build update data from provided fields
+    update_data = {}
+    if log_update.description is not None:
+        update_data["description"] = log_update.description
+    if log_update.manna_change is not None:
+        update_data["manna_change"] = log_update.manna_change
+    if log_update.downtime_change is not None:
+        update_data["downtime_change"] = log_update.downtime_change
+    if log_update.ll_clock_change is not None:
+        update_data["ll_clock_change"] = max(0, min(25, log_update.ll_clock_change))
 
-    if not result.data:
-        raise HTTPException(status_code=400, detail="Failed to update log entry")
+    if update_data:
+        result = (
+            db.table("log_entries").update(update_data).eq("id", str(log_id)).execute()
+        )
+        if not result.data:
+            raise HTTPException(status_code=400, detail="Failed to update log entry")
+        updated_log = result.data[0]
+    else:
+        updated_log = {k: v for k, v in log_result.data.items() if k != "pilots"}
 
-    return LogEntry(**result.data[0])
+    # Handle clock progress update if provided
+    if log_update.clock_progress is not None:
+        # Delete existing clock_progress for this log
+        db.table("clock_progress").delete().eq("log_entry_id", str(log_id)).execute()
+
+        # Insert new clock_progress entries
+        for progress in log_update.clock_progress:
+            # Verify clock belongs to pilot
+            clock_result = (
+                db.table("clocks")
+                .select("id")
+                .eq("id", str(progress.clock_id))
+                .eq("pilot_id", pilot_id)
+                .single()
+                .execute()
+            )
+
+            if clock_result.data:
+                db.table("clock_progress").insert({
+                    "log_entry_id": str(log_id),
+                    "clock_id": str(progress.clock_id),
+                    "ticks_applied": progress.ticks_applied,
+                }).execute()
+
+    # Recalculate pilot resources and clock states
+    recalculate_pilot_resources(db, pilot_id)
+
+    return LogEntry(**updated_log)
 
 
 @router.delete("/logs/{log_id}")
@@ -266,7 +294,7 @@ async def delete_log_entry(
     current_user: User = Depends(get_current_user),
     db: Client = Depends(get_db),
 ):
-    """Delete a log entry (note: this does NOT reverse resource changes)."""
+    """Delete a log entry. Pilot resources and clocks are recalculated after deletion."""
     # Get log and verify ownership
     log_result = (
         db.table("log_entries")
@@ -282,6 +310,12 @@ async def delete_log_entry(
     if log_result.data["pilots"]["user_id"] != str(current_user.id):
         raise HTTPException(status_code=403, detail="Not authorized")
 
+    pilot_id = log_result.data["pilot_id"]
+
+    # Delete log (cascade removes clock_progress entries)
     db.table("log_entries").delete().eq("id", str(log_id)).execute()
+
+    # Recalculate pilot resources and clock states
+    recalculate_pilot_resources(db, pilot_id)
 
     return {"message": "Log entry deleted successfully"}

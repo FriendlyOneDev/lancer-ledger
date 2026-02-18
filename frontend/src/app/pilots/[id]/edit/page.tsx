@@ -122,7 +122,7 @@ export default function EditPilotPage({ params }: EditPilotPageProps) {
   };
 
   const handleDelete = async () => {
-    if (!confirm("Are you sure you want to delete this pilot? This action cannot be undone.")) {
+    if (!confirm("Are you sure you want to delete this pilot? This cannot be undone.")) {
       return;
     }
 

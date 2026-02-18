@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from datetime import datetime
 from uuid import UUID
+from app.services.resource_calc import get_ll_clock_segments
 
 
 class PilotBase(BaseModel):
@@ -43,17 +44,6 @@ class Pilot(PilotBase):
 
     class Config:
         from_attributes = True
-
-
-def get_ll_clock_segments(license_level: int) -> int:
-    """Get the number of segments for an LL clock based on license level."""
-    if 1 <= license_level <= 5:
-        return 3
-    elif 6 <= license_level <= 9:
-        return 4
-    elif 10 <= license_level <= 12:
-        return 5
-    return 3  # Default
 
 
 class PilotWithDetails(Pilot):

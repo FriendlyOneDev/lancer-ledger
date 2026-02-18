@@ -4,7 +4,7 @@ from app.models.pilot import Pilot, PilotCreate, PilotUpdate
 from app.models.clock import Clock, ClockCreate, ClockUpdate
 from app.models.log_entry import LogEntry, LogEntryCreate, LogEntryUpdate
 from app.models.corporation import Corporation, CorporationCreate, CorporationUpdate
-from app.models.reputation import CorporationReputation, ReputationCreate, ReputationUpdate
+from app.models.reputation import PilotReputation, ReputationChangeCreate, ReputationChange
 from app.models.gear import ExoticGear, GearCreate, GearUpdate
 
 __all__ = [
@@ -23,9 +23,9 @@ __all__ = [
     "Corporation",
     "CorporationCreate",
     "CorporationUpdate",
-    "CorporationReputation",
-    "ReputationCreate",
-    "ReputationUpdate",
+    "PilotReputation",
+    "ReputationChangeCreate",
+    "ReputationChange",
     "ExoticGear",
     "GearCreate",
     "GearUpdate",

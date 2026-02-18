@@ -54,7 +54,6 @@ class LogEntryCreate(LogEntryBase):
     """Model for creating a log entry."""
 
     clock_progress: list[ClockProgressEntry] = []
-    tick_ll_clock: bool = True  # For game logs, auto-tick LL clock
     gear_acquired: list[GearAcquiredEntry] = []  # Gear obtained in this log
     gear_lost: list[GearLostEntry] = []  # Gear lost in this log
     reputation_changes: list[ReputationChangeEntry] = []  # Rep changes in this log
@@ -64,7 +63,10 @@ class LogEntryUpdate(BaseModel):
     """Model for updating a log entry."""
 
     description: str | None = None
-    # Note: resource changes are immutable after creation
+    manna_change: int | None = None
+    downtime_change: int | None = None
+    ll_clock_change: int | None = None
+    clock_progress: list[ClockProgressEntry] | None = None
 
 
 class LogEntry(LogEntryBase):
